@@ -358,6 +358,8 @@ function Home() {
   const [message, setMessage] = useState<string>('');
 
   // React Native 로 메시지 보내기
+  // React Native 로 메시지를 보낼때는 아래 형식을 준수하자.
+  // React Native 의 onMessage 가 실행된다.
   // 시간 메시지를 React Native 로 메시지 보내기
   const handleTime = () => {
     (window as any).ReactNativeWebView?.postMessage(new Date().toISOString());
@@ -435,7 +437,7 @@ import {
 import WebView from 'react-native-webview';
 
 const WebViewScreen = (): JSX.Element => {
-  const webUrl = 'http://192.168.0.66:3000';
+  const webUrl = 'http://192.168.0.195:3000';
 
   // WebView 의 url 에 있는 페이지가 모두 로딩이 되었는지 체크
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
@@ -460,15 +462,28 @@ const WebViewScreen = (): JSX.Element => {
   // 웹 뷰로 부터 데이터를 받는 함수
   const onMessage = (event: any) => {
     const data = event.nativeEvent.data;
+    console.log('data : ', data);
     if (data === 'load') {
       setIsLoaded(true);
       // 모두 준비가 되었으니 Webview 로 메시지를 보내준다.
       sendDataWeb({type: 'INIT_DATA', payload: {message: 'Hellow Next!'}});
       return;
     }
-    if (data.type === 'INIT_DATA') {
+    // 웹 뷰에서 INIT_DATA 글자가 전송된 경우
+    if (data === 'INIT_DATA') {
       setCount(0);
+      return;
     }
+    // 날짜가 전송된 경우
+    setMessage(data);
+  };
+
+  // 버튼 클릭시 count 값을 1 올려주고, 데이터 전송
+  const handleButtonClick = () => {
+    const temp = count + 1;
+    setCount(temp);
+    // 웹 뷰로 데이터 전송
+    sendDataWeb({type: 'UPDATE_COUNT', payload: {count: temp}});
   };
 
   return (
@@ -505,7 +520,9 @@ const WebViewScreen = (): JSX.Element => {
         <Text>{message}</Text>
       </View>
       <View style={styles.control}>
-        <TouchableOpacity style={styles.roundButton}>
+        <TouchableOpacity
+          style={styles.roundButton}
+          onPress={handleButtonClick}>
           <Text style={styles.buttonTxt}>{count}</Text>
         </TouchableOpacity>
       </View>
