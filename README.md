@@ -1,753 +1,432 @@
-# Component
+# Supabase
 
-- https://reactnative.dev/docs/0.74/components-and-apis
-- 참고로 scss, css 는 사용하지 않음.
-- emotion 은 별도로 적용해야 한다.
+- 우리가 Next 의 서버액션을 쓰다보니, ssr 을 기준으로 작업
+- Reacte Native 는 클라이언트입니다.
 
-```bash
-npm start
+- supabase 기존 테이블 사용(`todos`)
+
+## 타입스크립트를 위한 `타입 참조`
+
+- 이전 프로젝트에서 `package.json` 에 내용으로 `생성한 파일을 복사`해서 사용
+
+```json
+"generate-types": "npx supabase gen types typescript --project-id 프로젝트아이디 --schema public >  src/types/types_db.ts"
 ```
 
 ```bash
-a
+npm run generate-types
 ```
 
-## View
+- 생성되어진 `src/types/types_db.ts` 파일을 이용해서 진행할 예정
 
-- html 의 div 의 역할을 수행.
-- View 는 css 로 모양, 넓이, 등등을 셋팅
-- View 는 옵션으로 style 이 있음.
-- 아래는 인라인 스타일
+## Supabase 타입정의 파일
 
-```tsx
-import React from 'react';
-import {SafeAreaView, StyleSheet, Text, View} from 'react-native';
+- `/src/types/types_db.ts 생성`
 
-const AboutScreen = (): JSX.Element => {
-  return (
-    <SafeAreaView style={styles.container}>
-      <View
-        style={{
-          padding: 20,
-          backgroundColor: 'skyblue',
-          margin: 10,
-          borderWidth: 2,
-          borderRadius: 10,
-          borderColor: 'black',
-          width: 100,
-          height: 200,
-        }}
-      />
-    </SafeAreaView>
-  );
+## npm 설치 (버전주의)
+
+```bash
+npm install @supabase/supabase-js@2.39.5
+```
+
+```bash
+npm install react-native-url-polyfill
+```
+
+## .env 에 대해서
+
+### 1. 기존 프로젝트에서는 이미 env 가 셋팅되어 있음.
+
+- npx create-next-app@latest 프로젝트 생성(Next)
+
+```env
+NEXT_PUBLIC_SUPABASE_URL = 문자열;
+```
+
+```ts
+process.env.NEXT_PUBLIC_SUPABASE_URL;
+```
+
+- npm create vite@latest 프로젝트 생성(React Vite)
+
+```env
+VITE_SUPABASE_URL=문자열
+```
+
+```ts
+import.meta.env.VITE_SUPABASE_URL;
+```
+
+- npx create-react-app 프로젝트 생성(React CRA)
+
+```env
+REACT_APP_SUPABASE_URL=문자열
+```
+
+```ts
+process.env.REACT_APP_SUPABASE_URL;
+```
+
+### 2. React Native 는 개발자가 직접 셋팅하여아 함.
+
+- babel.config.js 수정 및 추가 필요
+- npm 도 추가설정
+- 사용법도 별도 진행
+
+### 3. env 셋팅 방법
+
+```bash
+npm install react-native-config
+```
+
+- /android/app/build.gradle
+- `app 경로 꼭 확인`
+- 아래 문장을 추가한다.
+
+```txt
+apply from: project(':react-native-config').projectDir.getPath() + "/dotenv.gradle"
+```
+
+- / 에 .env 파일을 생성
+
+```env
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-public-key
+```
+
+- `/src/types/react-native-config.d.ts` 파일 생성
+
+```ts
+// types/react-native-config.d.ts
+declare module 'react-native-config' {
+  interface Env {
+    SUPABASE_URL: string;
+    SUPABASE_ANON_KEY: string;
+  }
+
+  const Config: Env;
+  export default Config;
+}
+```
+
+## Supabase 를 위한 폴더 및 파일 생성
+
+- `/src/lib/supabase 폴더` 생성
+- `/src/lib/supabase/client.ts 파일` 생성
+
+```ts
+import 'react-native-url-polyfill/auto'; // 무조건 첫줄
+
+import Config from 'react-native-config';
+import {createClient} from '@supabase/supabase-js';
+import {Database} from '../../types/types_db';
+
+export const supabase = createClient<Database>(
+  Config.SUPABASE_URL,
+  Config.SUPABASE_ANON_KEY,
+);
+```
+
+## Supabase CRUD API 파일 만들기
+
+- `/src/api/todos-api.ts 파일` 생성
+
+```ts
+import {supabase} from '../lib/supabase/client';
+import {Database} from '../types/types_db';
+import 'react-native-get-random-values';
+import {v4 as uuidv4} from 'uuid';
+
+export type TodosRow = Database['public']['Tables']['todos']['Row'];
+export type TodosRowInsert = Database['public']['Tables']['todos']['Insert'];
+export type TodosRowUpdate = Database['public']['Tables']['todos']['Update'];
+
+// Read
+export const getTodos = async () => {
+  let {data, error, status} = await supabase
+    .from('todos')
+    .select('*')
+    .order('id', {ascending: false});
+
+  if (error) {
+    console.log(error.message);
+    return;
+  }
+  return {data, error, status} as {
+    data: TodosRow[] | null;
+    error: Error | null;
+    status: number;
+  };
 };
-// css
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: 'white',
-  },
-});
-export default AboutScreen;
-```
+// Create
+export const createTodo = async (title: string) => {
+  const {data, error, status} = await supabase
+    .from('todos')
+    .insert([
+      {
+        title: title,
+        contents: JSON.stringify([]),
+        start_date: new Date().toISOString(),
+        end_date: new Date().toISOString(),
+        user_id: uuidv4(), // 로그인 사용자 정보
+        user_email: '', // 로그인 사용자 정보
+      },
+    ])
+    .select()
+    .single();
 
-- 아래는 객체 변수 정의 스타일
+  if (error) {
+    console.log(error.message);
+    return;
+  }
 
-```tsx
-import React from 'react';
-import {SafeAreaView, StyleSheet, View} from 'react-native';
-
-const AboutScreen = (): JSX.Element => {
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.viewStyle} />
-    </SafeAreaView>
-  );
+  return {data, error, status};
 };
-// css
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: 'white',
-  },
-  viewStyle: {
-    padding: 20,
-    backgroundColor: 'skyblue',
-    margin: 10,
-    borderWidth: 2,
-    borderRadius: 10,
-    borderColor: 'black',
-    width: 100,
-    height: 200,
-  },
-});
-export default AboutScreen;
-```
-
-- 일반적인 구성 : flex 를 많이 활용한다.
-
-```tsx
-import React from 'react';
-import {SafeAreaView, StyleSheet, Text, View} from 'react-native';
-
-const AboutScreen = (): JSX.Element => {
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.viewStyle}>
-        <Text>Hello</Text>
-      </View>
-    </SafeAreaView>
-  );
+// Update
+export const updateTodo = async (id: number, title: string) => {
+  const {data, error, status} = await supabase
+    .from('todos')
+    .update({
+      title: title,
+    })
+    .eq('id', id)
+    .select()
+    .single();
+  return {data, error, status} as {
+    data: TodosRow | null;
+    error: Error | null;
+    status: number;
+  };
 };
-// css
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  viewStyle: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'skyblue',
-  },
-  viewStyle2: {
-    flex: 1,
-    backgroundColor: 'orange',
-  },
-});
-export default AboutScreen;
-```
-
-## Text
-
-- numberOfLines : 글의 행수
-- ellipsizeMode : 말줄임 표현 (기본 tail)
-- ellipsizeMode 는 numberOfLines 이 1인 경우 잘 작동함.
-- ellipsizeMode 는 numberOfLines 이 2이상의 경우 tail.
-
-```tsx
-import React from 'react';
-import {SafeAreaView, StyleSheet, Text, View} from 'react-native';
-
-const AboutScreen = (): JSX.Element => {
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.viewStyle}>
-        <Text style={styles.textstyle} numberOfLines={1} ellipsizeMode="tail">
-          Lorem ipsum dolor sit amet consectetur adipisicing elit. Nemo, quaerat
-          quisquam incidunt reiciendis culpa similique exercitationem aliquam.
-          Quia, eligendi nam, eaque voluptatem, consectetur excepturi ea eos rem
-          asperiores laudantium in.
-        </Text>
-      </View>
-    </SafeAreaView>
-  );
+// Delete
+export const deleteTodo = async (id: number) => {
+  const {data, error} = await supabase.from('todos').delete().eq('id', id);
+  if (error) {
+    console.log(error.message);
+    return {error};
+  }
+  return {data};
 };
-// css
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  viewStyle: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'skyblue',
-  },
-  textstyle: {
-    fontSize: 20,
-    color: '#1e1e1e',
-    fontWeight: 'bold',
-  },
-});
-export default AboutScreen;
 ```
 
-- onPress
+## Supabase 테이틀 출력하기 (Read)
+
+- /src/screens/HomeScreen.tsx 적용
 
 ```tsx
-<Text
-  style={styles.textstyle}
-  numberOfLines={1}
-  ellipsizeMode="tail"
-  onPress={() => Alert.alert('클릭')}>
-  Lorem ipsum dolor sit amet consectetur adipisicing elit. Nemo, quaerat
-  quisquam incidunt reiciendis culpa similique exercitationem aliquam. Quia,
-  eligendi nam, eaque voluptatem, consectetur excepturi ea eos rem asperiores
-  laudantium in.
-</Text>
-```
+import React, {useEffect, useState} from 'react';
+import {
+  Alert,
+  Button,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import {
+  createTodo,
+  deleteTodo,
+  getTodos,
+  TodosRow,
+  updateTodo,
+} from '../api/todos-api';
+import {TextInput} from 'react-native-gesture-handler';
+
+const HomeScreen = ({navigation}: {navigation: any}): JSX.Element => {
+  // 전체 목록 state
+  const [todos, setTodos] = useState<TodosRow[]>([]);
+  // 수정 관련 state
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+
+  // 새글 관련 state
+  const [newTitle, setNewTitle] = useState('');
+
+  // 전체 목록 가져오기
+  const fetchGetTodos = async () => {
+    const result = await getTodos();
+    if (!result) {
+      console.log('데이터 호출 실패');
+      return;
+    }
+    const {data, error, status} = result;
+    if (error) {
+      console.log('Error : ', error.message);
+      return;
+    }
+    if (data) {
+      console.log(status);
+      setTodos(data);
+    }
+  };
+
+  // 목록 삭제하기
+  const handleDelete = async (id: number) => {
+    const {data} = await deleteTodo(id);
+    console.log(data);
+    // 전체 목록 다시 받기
+    fetchGetTodos();
+  };
+
+  // 제목 업데이트
+  const handleEdit = async (id: number) => {
+    if (editTitle.trim() === '') {
+      Alert.alert('제목을 입력하세요.');
+      return;
+    }
+
+    const {data, error, status} = await updateTodo(id, editTitle);
+    console.log(data);
+    setEditId(null);
+    setEditTitle('');
+    Alert.alert('제목이 수정되었습니다');
+    fetchGetTodos();
+  };
+  // 새글 추가
+  const handleAdd = async () => {
+    if (newTitle.trim() === '') {
+      Alert.alert('제목을 입력하세요.');
+      return;
+    }
+    const result = await createTodo(newTitle);
+
+    if (!result) {
+      Alert.alert('입력에 실패했습니다.');
+      return;
+    }
+    const {data, error, status} = result;
+    console.log(data);
+    setNewTitle('');
+    fetchGetTodos();
+  };
+
+  useEffect(() => {
+    fetchGetTodos();
+  }, []);
 
-- selectable
-
-```tsx
-<Text
-  style={styles.textstyle}
-  numberOfLines={1}
-  ellipsizeMode="tail"
-  // onPress={() => Alert.alert('클릭')}
-  selectable>
-  Lorem ipsum dolor sit amet consectetur adipisicing elit. Nemo, quaerat
-  quisquam incidunt reiciendis culpa similique exercitationem aliquam. Quia,
-  eligendi nam, eaque voluptatem, consectetur excepturi ea eos rem asperiores
-  laudantium in.
-</Text>
-```
-
-- Text 중첩
-
-```tsx
-<Text
-  style={styles.textstyle}
-  numberOfLines={1}
-  ellipsizeMode="tail"
-  // onPress={() => Alert.alert('클릭')}
-  selectable>
-  Lorem ipsum dolor <Text style={{color: 'red'}}>sit amet</Text>
-  consectetur adipisicing elit. Nemo, quaerat quisquam incidunt reiciendis culpa
-  similique exercitationem aliquam. Quia, eligendi nam, eaque voluptatem, consectetur
-  excepturi ea eos rem asperiores laudantium in.
-</Text>
-```
-
-## TextInput
-
-- 글자 입력창
-
-```tsx
-import React, {useState} from 'react';
-import {SafeAreaView, StyleSheet, Text, TextInput, View} from 'react-native';
-
-const AboutScreen = (): JSX.Element => {
-  const [name, setName] = useState('');
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.viewStyle}>
-        <TextInput style={styles.inputStyle} />
-      </View>
-    </SafeAreaView>
-  );
-};
-// css
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  viewStyle: {
-    flex: 1,
-  },
-  inputStyle: {
-    borderWidth: 1,
-    padding: 10,
-    margin: 5,
-  },
-});
-export default AboutScreen;
-```
-
-- placeholder : 안내문
-- value : 입력값
-- `onChangeText` : 텍스트 변경시 처리값
-
-```tsx
-import React, {useState} from 'react';
-import {SafeAreaView, StyleSheet, Text, TextInput, View} from 'react-native';
-
-const AboutScreen = (): JSX.Element => {
-  const [name, setName] = useState('');
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.viewStyle}>
-        <TextInput
-          style={styles.inputStyle}
-          placeholder="이름을 입력하세요"
-          value={name}
-          onChangeText={setName}
-        />
-        <Text>{name}</Text>
-      </View>
-    </SafeAreaView>
-  );
-};
-// css
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  viewStyle: {
-    flex: 1,
-  },
-  inputStyle: {
-    borderWidth: 1,
-    padding: 10,
-    margin: 5,
-  },
-});
-export default AboutScreen;
-```
-
-- secureTextEntry : 비밀번호 입력시 별표로 표시
-
-```tsx
-<TextInput
-  style={styles.inputStyle}
-  placeholder="비밀번호를 입력하세요."
-  secureTextEntry={true}
-/>
-```
-
-- keyboardType : 키보드 타입
-
-```tsx
-<TextInput
-  style={styles.inputStyle}
-  placeholder="숫자를 입력하라."
-  keyboardType="numeric"
-/>
-```
-
-- multiline : 여러 줄 입력 가능
-
-```tsx
-<TextInput
-  style={styles.inputStyle}
-  placeholder="숫자를 입력하라."
-  keyboardType="default"
-  multiline={true}
-/>
-```
-
-- maxLength : 최대 입력 길이
-
-```tsx
-<TextInput style={styles.inputStyle} placeholder="10자 제한" maxLength={10} />
-```
-
-- autoCapitalize : 자동 대문자 시작
-
-```tsx
-<TextInput
-  style={styles.inputStyle}
-  placeholder="대문자 시작"
-  autoCapitalize="words"
-/>
-```
-
-- returnKeyType / onSubmitEditing : 엔터키 처리
-
-```tsx
-<TextInput
-  style={styles.inputStyle}
-  placeholder="대문자 시작"
-  autoCapitalize="words"
-  returnKeyType="done"
-  onSubmitEditing={() => Alert.alert('성공?')}
-/>
-```
-
-## Button
-
-- 기본 버튼
-
-```tsx
-<Button title="클릭" onPress={() => Alert.alert('클릭')} />
-```
-
-- title : 버튼 글자
-- onPress : 이벤트 실행
-- color : 버튼 색상 (ios 에서는 글자 색상)
-- disabled : 버튼 활성/비활성 여부
-
-```tsx
-<Button
-  title="클릭"
-  onPress={() => Alert.alert('클릭')}
-  color="#1e1e1e"
-  disabled={true}
-/>
-```
-
-- Button 은 `style` Props 가 존재하지 않아서 css 적용 불가
-- CSS 적용을 한 버튼은 다른 컴포넌트로 대체(`TouchableOpacity, Pressable`)
-
-## Image
-
-- local 즉, /assets 폴더에서 이미지 출력하기 : require 사용
-
-```tsx
-<Image
-  style={{width: 200, height: 200}}
-  source={require('../../assets/images/logo.png')}
-/>
-```
-
-- resizeMode : 이미지 크기 조정
-  - cover : 꽉 채우기
-  - contain : 비율 유지
-  - center : 가운데 정렬
-  - repeat : 반복
-  - stretch : 늘리기
-
-```tsx
-<Image
-  style={{width: 200, height: 200}}
-  source={{
-    uri: 'https://picsum.photos/200/300?random=1',
-  }}
-  resizeMode="cover"
-/>
-```
-
-- onError : 이미지 로딩 실패
-- onLoadEnd : 이미지 로딩 시작
-- onLoadStart : 이미지 로딩 완료
-
-```tsx
-<Image
-  style={{width: 200, height: 200, borderRadius: 100}}
-  source={{
-    uri: 'https://picsum.photos/200/300?random=2',
-  }}
-  resizeMode="cover"
-  onError={() => Alert.alert('이미지 로딩 실패')}
-  onLoadEnd={() => Alert.alert('이미지 로딩 완료')}
-  onLoadStart={() => Alert.alert('이미지 로딩 시작')}
-  blurRadius={0}
-/>
-```
-
-- blurRadius : 블러 반경
-
-```tsx
-<Image
-  style={{width: 200, height: 200}}
-  source={{uri: 'https://picsum.photos/200/300?random=1'}}
-  blurRadius={2}
-/>
-```
-
-## ScrollView
-
-- 내용이 너무 길어서 한 화면에 다 못보는 경우 활용
-
-```tsx
-import React, {useState} from 'react';
-import {SafeAreaView, ScrollView, StyleSheet, Text, View} from 'react-native';
-
-const AboutScreen = (): JSX.Element => {
-  const [name, setName] = useState('');
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={{height: 100}}>
-        <ScrollView>
-          <Text>내용임.</Text>
-          <Text>내용임.</Text>
-          <Text>내용임.</Text>
-          <Text>내용임.</Text>
-          <Text>내용임.</Text>
-          <Text>내용임.</Text>
-          <Text>내용임.</Text>
-          <Text>내용임.</Text>
-          <Text>내용임.</Text>
-          <Text>내용임.</Text>
-          <Text>내용임.</Text>
-        </ScrollView>
-      </View>
-    </SafeAreaView>
-  );
-};
-// css
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  viewStyle: {
-    flex: 1,
-  },
-  inputStyle: {
-    borderWidth: 1,
-    padding: 10,
-    margin: 5,
-  },
-});
-export default AboutScreen;
-```
-
-- horizontal : 가로 스크롤
-
-```tsx
-<ScrollView horizontal>
-  <Text>내용임.</Text>
-</ScrollView>
-```
-
-- scrollEnabled : 스크롤 막기
-
-```tsx
-<ScrollView scrollEnabled={false}>
-  <Text>내용임.</Text>
-</ScrollView>
-```
-
-- onScroll / scrollEventThrottle(이벤트 발생 빈도) : 스크롤 이벤트 처리
-
-```tsx
-<ScrollView
-  onScroll={e => console.log(e.nativeEvent.contentOffset.y)}
-  scrollEventThrottle={16}>
-  <Text>내용임.</Text>
-</ScrollView>
-```
-
-- contentContainerStyle : 스크롤 안쪽 스타일시트 설정
-
-```tsx
-<ScrollView
-  contentContainerStyle={{
-    padding: 10,
-    margin: 10,
-    alignItems: 'center',
-    backgroundColor: 'skyblue',
-  }}>
-  <Text>내용임.</Text>
-</ScrollView>
-```
-
-- refreshControl : 새로 고침 기능
-
-```tsx
-import React, {useState} from 'react';
-import {SafeAreaView, ScrollView, StyleSheet, Text, View} from 'react-native';
-import {RefreshControl} from 'react-native-gesture-handler';
-
-const AboutScreen = (): JSX.Element => {
-  const [name, setName] = useState('');
-  const [refreshing, setRefreshing] = useState(false);
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={{height: 100}}>
-        <ScrollView
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => {
-                setRefreshing(true);
-                setTimeout(() => setRefreshing(false), 2000);
-              }}
-            />
-          }>
-          <Text>아래로 당기면 새로고침 실행</Text>
-        </ScrollView>
-      </View>
-    </SafeAreaView>
-  );
-};
-// css
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  viewStyle: {
-    flex: 1,
-  },
-  inputStyle: {
-    borderWidth: 1,
-    padding: 10,
-    margin: 5,
-  },
-});
-export default AboutScreen;
-```
-
-- showsVerticalScrollIndicator : 스크롤바 숨기기
-
-```tsx
-<ScrollView showsVerticalScrollIndicator={true}>
-  <Text>내용임.</Text>
-</ScrollView>
-```
-
-## 버튼말고 `TouchableOpacity` 사용하기
-
-- Button 은 css 작업이 불가함. (style props가 없어서)
-- 다양한 css 용 Button 은 `TouchableOpacity` 사용
-
-```tsx
-<TouchableOpacity onPress={() => Alert.alert('버튼 클릭')}>
-  <Text>버튼</Text>
-</TouchableOpacity>
-```
-
-- style, activeOpacity 등 스타일 작업
-
-```tsx
-<TouchableOpacity
-  onPress={() => Alert.alert('버튼 클릭')}
-  style={{backgroundColor: 'skyblue', padding: 10, borderRadius: 10}}
-  activeOpacity={0.5}>
-  <Text>버튼</Text>
-</TouchableOpacity>
-```
-
-- onLongPress : 사용자가 길게 눌렀을 때 처리
-
-```tsx
-<TouchableOpacity
-  onPress={() => Alert.alert('버튼 누르지 마세요.')}
-  onLongPress={() => Alert.alert('길게 누르지 마세요.')}>
-  <Text>버튼</Text>
-</TouchableOpacity>
-```
-
-- hitSlop : 터치 영역을 강제로 넓히기
-
-```tsx
-<TouchableOpacity
-  onPress={() => Alert.alert('버튼 누르지 마세요.')}
-  hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}>
-  <Text style={{backgroundColor: 'skyblue'}}>버튼</Text>
-</TouchableOpacity>
-```
-
-- disabled : 버튼 비활성화
-
-```tsx
-<TouchableOpacity
-  disabled={true}
-  onPress={() => Alert.alert('버튼 누르지 마세요.')}>
-  <Text style={{backgroundColor: 'skyblue'}}>버튼</Text>
-</TouchableOpacity>
-```
-
-## FlatList
-
-- ScrollView 와는 다르게 화면에 보이는 목록만 갱신
-- ScrollView 는 전체 데이터를 한번에 랜더링함.
-- FlatList 는 화면에 보이는 것만 렌더링함.
-- FlatList 가 더 성능이 좋다.
-- 많은 목록에서 효율적으로 관리가 가능하다.
-
-- data : 보여줄 데이터 `배열`
-- renderItem : `함수`로서 목록 아이템 렌더링
-- keyExtractor : `함수`로서 목록 아이템 고유 키
-
-```tsx
-import React, {useState} from 'react';
-import {FlatList, SafeAreaView, StyleSheet, Text, View} from 'react-native';
-
-const AboutScreen = (): JSX.Element => {
-  const data = [
-    {id: 1, title: '사과'},
-    {id: 2, title: '딸기'},
-    {id: 3, title: '배'},
-  ];
   return (
     <SafeAreaView style={styles.container}>
       <View>
-        <FlatList
-          data={data}
-          renderItem={({item}) => <Text>{item.title}</Text>}
-          keyExtractor={item => item.id.toString()}
+        <Text>Home Screen</Text>
+        <Button
+          title={'About 로 이동'}
+          onPress={() => navigation.navigate('About')}
+        />
+        <Button
+          title={'WebView 로 이동'}
+          onPress={() => navigation.navigate('WebView')}
+        />
+        <Button
+          title={'Profile 로 이동'}
+          onPress={() => navigation.navigate('Profile')}
         />
       </View>
+      {/* 추가 */}
+      <View style={[styles.inputArea, {marginTop: 20}]}>
+        <TextInput
+          style={styles.input}
+          value={newTitle}
+          onChangeText={setNewTitle}
+        />
+        <Button title="추가" color={'#0b72e0'} onPress={() => handleAdd()} />
+      </View>
+      {/* 목록 */}
+      <ScrollView style={styles.todoList}>
+        {todos.map(item => (
+          <View key={item.id} style={styles.todoCard}>
+            {editId === item.id ? (
+              <>
+                <TextInput
+                  style={styles.input}
+                  value={editTitle}
+                  onChangeText={setEditTitle}
+                />
+                <View style={styles.todoButtons}>
+                  <Button
+                    title="저장"
+                    color={'#0b72e0'}
+                    onPress={() => handleEdit(item.id)}
+                  />
+                  <Button
+                    title="취소"
+                    color={'#cb05ee'}
+                    onPress={() => {
+                      setEditId(null);
+                      setEditTitle('');
+                    }}
+                  />
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.todoTitle}>
+                  {item.title ? item.title : 'NoTitle'}
+                </Text>
+                <View style={styles.todoButtons}>
+                  <Button
+                    title="수정"
+                    color={'#4caf50'}
+                    onPress={() => {
+                      setEditId(item.id);
+                      setEditTitle(item.title || '');
+                    }}
+                  />
+                  <Button
+                    title="삭제"
+                    color={'#f44336'}
+                    onPress={() => handleDelete(item.id)}
+                  />
+                </View>
+              </>
+            )}
+          </View>
+        ))}
+      </ScrollView>
     </SafeAreaView>
   );
 };
+
 // css
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#fff',
   },
-  viewStyle: {
+  todoList: {
     flex: 1,
   },
+  todoCard: {
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 10,
+    marginBottom: 12,
+    elevation: 2,
+  },
+  todoTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  todoButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 8,
+    gap: 10,
+  },
+  input: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 8,
+    marginRight: 8,
+  },
+  inputArea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
 });
-export default AboutScreen;
+
+export default HomeScreen;
 ```
-
-- horizontal : 가로 스크롤 옵션
-
-```tsx
-<FlatList
-  horizontal
-  data={data}
-  renderItem={({item}) => <Text>{item.title}</Text>}
-  keyExtractor={item => item.id.toString()}
-/>
-```
-
-- ListHeaderComponent, ListFooterComponent, ItemSeparatorComponent, ListEmptyComponent
-- 해더, 푸터, 구분선, 데이터가 없을 때
-
-```tsx
-<FlatList
-  data={data}
-  renderItem={({item}) => <Text>{item.title}</Text>}
-  keyExtractor={item => item.id.toString()}
-  ListHeaderComponent={
-    <Text style={{fontSize: 20, fontWeight: 'bold'}}>과일 목록</Text>
-  }
-  ListFooterComponent={
-    <Text style={{fontSize: 20, fontWeight: 'bold'}}>목록 구경 다 했음</Text>
-  }
-  ItemSeparatorComponent={() => (
-    <View
-      style={{
-        height: 1,
-        backgroundColor: 'skyblue',
-        marginTop: 3,
-        marginBottom: 3,
-      }}
-    />
-  )}
-  ListEmptyComponent={<Text>데이터가 없습니다.</Text>}
-/>
-```
-
-- numColumns : 그리드 리스트
-
-```tsx
-<FlatList
-  numColumns={2}
-  data={data}
-  renderItem={({item}) => <Text>{item.title}</Text>}
-  keyExtractor={item => item.id.toString()}
-/>
-```
-
-- 새로고침
-
-```tsx
-<FlatList
-  data={data}
-  renderItem={({item}) => <Text>{item.title}</Text>}
-  keyExtractor={item => item.id.toString()}
-  refreshing={refreshing}
-  onRefresh={() => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 2000);
-  }}
-/>
-```
-
-## SafeAreaView
-
-- 화면상에 안전한 공간, 즉 상단 노치, 하단 홈바 등을 제외한 영역에 배치
-- SafeAreaView 로 배치되지 않으면 상단, 하단 기본 영역이 겹침
-- 옵션은 style
-
-## Alert
-
-## Modal
-
-## StatusBar
-
-## Pressable
-
-## ActivityIndicator
-
-## Switch
-
-## Picker
