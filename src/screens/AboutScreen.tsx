@@ -1,27 +1,26 @@
+import {Picker} from '@react-native-picker/picker';
 import React, {useState} from 'react';
-import {FlatList, SafeAreaView, StyleSheet, Text, View} from 'react-native';
+import {SafeAreaView, StyleSheet, Text, View} from 'react-native';
 
 const AboutScreen = (): JSX.Element => {
-  const data = [
-    {id: 1, title: '사과'},
-    {id: 2, title: '딸기'},
-    {id: 3, title: '배'},
-    {id: 4, title: '참외'},
-  ];
-  const [refreshing, setRefreshing] = useState(false);
+  // 초기 선택된 목록관련 state
+  const [selected, setSelected] = useState<string>('banana');
   return (
     <SafeAreaView style={styles.container}>
       <View>
-        <FlatList
-          data={data}
-          renderItem={({item}) => <Text>{item.title}</Text>}
-          keyExtractor={item => item.id.toString()}
-          refreshing={refreshing}
-          onRefresh={() => {
-            setRefreshing(true);
-            setTimeout(() => setRefreshing(false), 2000);
-          }}
-        />
+        <Text>목록에서 선택하시오.</Text>
+        <View>
+          <Picker
+            selectedValue={selected}
+            onValueChange={itemValue => setSelected(itemValue)}
+            mode="dialog">
+            <Picker.Item label="사과" value={'apple'} />
+            <Picker.Item label="바나나" value={'banana'} />
+            <Picker.Item label="배" value={'bae'} />
+            <Picker.Item label="참외" value={'melon'} />
+          </Picker>
+        </View>
+        <Text style={{color: 'red'}}>선택한 과일: {selected}</Text>
       </View>
     </SafeAreaView>
   );
@@ -29,9 +28,6 @@ const AboutScreen = (): JSX.Element => {
 // css
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-  },
-  viewStyle: {
     flex: 1,
   },
 });
